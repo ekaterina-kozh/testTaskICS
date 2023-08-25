@@ -3,11 +3,12 @@ create procedure syn.usp_ImportFileCustomerSeasonal
 as
 set nocount on
 begin
+	-- 16. Все переменные задаются в одном объявлении
 	declare @RowCount int = (select count(*) from syn.SA_CustomerSeasonal)
 	-- 1. Рекомендуется при объявлении типов не использовать длину поля max
-	declare @ErrorMessage varchar(max)
+	,@ErrorMessage varchar(max)
 
--- Проверка на корректность загрузки
+	-- Проверка на корректность загрузки
 	if not exists (
 	-- 2. В условных операторах с одним условием весь блок с условиями смещается на один отступ
 		select 1
@@ -25,7 +26,7 @@ begin
 			return
 		end
 
-	-- 12. Логический отступ
+	-- 12. Логический отступ, создание таблицы
 	CREATE TABLE #ProcessedRows (
 		ActionType varchar(255),
 		ID int
@@ -35,20 +36,22 @@ begin
 	-- Чтение из слоя временных данных
 	-- 5. При create table запятые остаются в конце строк, чтоб не менять код при автоматической генерации
 	select
-		cc.ID as ID_dbo_Customer,
+		-- 14. Не обязательно указывать схему в ID_dbo_Customer, так как схема та же
+		cc.ID as ID_Customer
 		/* 
 		11. Объекты состоят в разных схемах, 
 		поэтому должно быть другое название поля [ID_][схема_]{Название}[_Постфикс] 
 		*/
-		cst.ID as ID_syn_CustomerSystemType,
-		s.ID as ID_Season,
-		cast(cs.DateBegin as date) as DateBegin,
-		cast(cs.DateEnd as date) as DateEnd,
+		,cst.ID as ID_syn_CustomerSystemType
+		,s.ID as ID_Season
+		,cast(cs.DateBegin as date) as DateBegin
+		,cast(cs.DateEnd as date) as DateEnd
 		-- 13. Схема одна, поэтому dbo в названии не нужно
-		cd.ID as ID_CustomerDistributor,
-		cast(isnull(cs.FlagActive, 0) as bit) as FlagActive
+		,cd.ID as ID_CustomerDistributor
+		,cast(isnull(cs.FlagActive, 0) as bit) as FlagActive
 	into #CustomerSeasonal
-	from syn.SA_CustomerSeasonal cs
+	-- 15. Не хватает as
+	from syn.SA_CustomerSeasonal as cs
 		join dbo.Customer as cc on cc.UID_DS = cs.UID_DS_Customer
 			and cc.ID_mapping_DataSource = 1
 		join dbo.Season as s on s.Name = cs.Season
@@ -62,9 +65,9 @@ begin
 	-- Определяем некорректные записи
 	-- Добавляем причину, по которой запись считается некорректной	
 	select
-		-- 6. Запятые остаются в конце строк
-		cs.*,
-		case
+		-- 6. Перечисление атрибутов с новой строки
+		cs.*
+		,case
 			-- 7. Результат на 1 отступ от when, с новой строки
 			when cc.ID is null 
 				then 'UID клиента отсутствует в справочнике "Клиент"'
