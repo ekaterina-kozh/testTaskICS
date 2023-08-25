@@ -4,36 +4,49 @@ as
 set nocount on
 begin
 	declare @RowCount int = (select count(*) from syn.SA_CustomerSeasonal)
+	-- 1. Рекомендуется при объявлении типов не использовать длину поля max
 	declare @ErrorMessage varchar(max)
 
 -- Проверка на корректность загрузки
 	if not exists (
-	select 1
-	from syn.ImportFile as f
-	where f.ID = @ID_Record
-		and f.FlagLoaded = cast(1 as bit)
+	-- 2. В условных операторах с одним условием весь блок с условиями смещается на один отступ
+		select 1
+	-- 3. При наименовании алиаса использовать первые заглавные буквы каждого слова в названии объекта, которому дают алиас.
+		from syn.ImportFile as imf
+		where imf.ID = @ID_Record
+			and imf.FlagLoaded = cast(1 as bit)
 	)
 		begin
 			set @ErrorMessage = 'Ошибка при загрузке файла, проверьте корректность данных'
 
 			raiserror(@ErrorMessage, 3, 1)
+			-- 10. нужна пустая строка перед return
+	
 			return
 		end
 
+	-- 12. Логический отступ
 	CREATE TABLE #ProcessedRows (
 		ActionType varchar(255),
 		ID int
 	)
-	
-	--Чтение из слоя временных данных
+
+	-- 4. Пробел перед текстом комментария
+	-- Чтение из слоя временных данных
+	-- 5. При create table запятые остаются в конце строк, чтоб не менять код при автоматической генерации
 	select
-		cc.ID as ID_dbo_Customer
-		,cst.ID as ID_CustomerSystemType
-		,s.ID as ID_Season
-		,cast(cs.DateBegin as date) as DateBegin
-		,cast(cs.DateEnd as date) as DateEnd
-		,cd.ID as ID_dbo_CustomerDistributor
-		,cast(isnull(cs.FlagActive, 0) as bit) as FlagActive
+		cc.ID as ID_dbo_Customer,
+		/* 
+		11. Объекты состоят в разных схемах, 
+		поэтому должно быть другое название поля [ID_][схема_]{Название}[_Постфикс] 
+		*/
+		cst.ID as ID_syn_CustomerSystemType,
+		s.ID as ID_Season,
+		cast(cs.DateBegin as date) as DateBegin,
+		cast(cs.DateEnd as date) as DateEnd,
+		-- 13. Схема одна, поэтому dbo в названии не нужно
+		cd.ID as ID_CustomerDistributor,
+		cast(isnull(cs.FlagActive, 0) as bit) as FlagActive
 	into #CustomerSeasonal
 	from syn.SA_CustomerSeasonal cs
 		join dbo.Customer as cc on cc.UID_DS = cs.UID_DS_Customer
@@ -47,25 +60,37 @@ begin
 		and try_cast(isnull(cs.FlagActive, 0) as bit) is not null
 
 	-- Определяем некорректные записи
-	-- Добавляем причину, по которой запись считается некорректной
+	-- Добавляем причину, по которой запись считается некорректной	
 	select
-		cs.*
-		,case
-			when cc.ID is null then 'UID клиента отсутствует в справочнике "Клиент"'
-			when cd.ID is null then 'UID дистрибьютора отсутствует в справочнике "Клиент"'
-			when s.ID is null then 'Сезон отсутствует в справочнике "Сезон"'
-			when cst.ID is null then 'Тип клиента в справочнике "Тип клиента"'
-			when try_cast(cs.DateBegin as date) is null then 'Невозможно определить Дату начала'
-			when try_cast(cs.DateEnd as date) is null then 'Невозможно определить Дату начала'
-			when try_cast(isnull(cs.FlagActive, 0) as bit) is null then 'Невозможно определить Активность'
+		-- 6. Запятые остаются в конце строк
+		cs.*,
+		case
+			-- 7. Результат на 1 отступ от when, с новой строки
+			when cc.ID is null 
+				then 'UID клиента отсутствует в справочнике "Клиент"'
+			when cd.ID is null 
+				then 'UID дистрибьютора отсутствует в справочнике "Клиент"'
+			when s.ID is null 
+				then 'Сезон отсутствует в справочнике "Сезон"'
+			when cst.ID is null 
+				then 'Тип клиента в справочнике "Тип клиента"'
+			when try_cast(cs.DateBegin as date) is null 
+				then 'Невозможно определить Дату начала'
+			when try_cast(cs.DateEnd as date) is null 
+				then 'Невозможно определить Дату начала'
+			when try_cast(isnull(cs.FlagActive, 0) as bit) is null 
+				then 'Невозможно определить Активность'
 		end as Reason
 	into #BadInsertedRows
 	from syn.SA_CustomerSeasonal as cs
-	left join dbo.Customer as cc on cc.UID_DS = cs.UID_DS_Customer
-		and cc.ID_mapping_DataSource = 1
-	left join dbo.Customer as cd on cd.UID_DS = cs.UID_DS_CustomerDistributor and cd.ID_mapping_DataSource = 1
-	left join dbo.Season as s on s.Name = cs.Season
-	left join syn.CustomerSystemType as cst on cst.Name = cs.CustomerSystemType
+		-- 8. 1 отступ при join 
+		left join dbo.Customer as cc on cc.UID_DS = cs.UID_DS_Customer
+			and cc.ID_mapping_DataSource = 1
+	-- 9. Условие and с новой строки, 2 отступа
+		left join dbo.Customer as cd on cd.UID_DS = cs.UID_DS_CustomerDistributor 
+			and cd.ID_mapping_DataSource = 1
+		left join dbo.Season as s on s.Name = cs.Season
+		left join syn.CustomerSystemType as cst on cst.Name = cs.CustomerSystemType
 	where cc.ID is null
 		or cd.ID is null
 		or s.ID is null
